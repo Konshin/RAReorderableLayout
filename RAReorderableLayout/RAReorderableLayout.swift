@@ -109,7 +109,7 @@ public class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognize
         }
     }
     
-    public var screenEdgesForDeletion = [RAReorderedLayoutEdge]()
+    public var screenEdgesForDeletion = [(edge: RAReorderedLayoutEdge, insetForRemove: CGFloat)]()
     
     private var offsetFromTop: CGFloat {
         let contentOffset = collectionView!.contentOffset
@@ -271,25 +271,25 @@ public class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognize
         
         let fakeViewFrame = fakeView.frame
         
-        for edge in screenEdgesForDeletion {
+        for (edge, inset) in screenEdgesForDeletion {
             switch edge {
             case .Left:
-                if fakeViewFrame.origin.x < 0 {
+                if fakeViewFrame.origin.x < inset {
                     try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView, collectionView: collectionView)
                     return
                 }
             case .Top:
-                if fakeViewFrame.origin.y < 0 {
+                if fakeViewFrame.origin.y < inset {
                     try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView, collectionView: collectionView)
                     return
                 }
             case .Right:
-                if fakeViewFrame.maxX > collectionView.contentSize.width {
+                if fakeViewFrame.maxX > collectionView.contentSize.width - inset {
                     try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView, collectionView: collectionView)
                     return
                 }
             case .Bottom:
-                if fakeViewFrame.maxY > collectionView.contentSize.height {
+                if fakeViewFrame.maxY > collectionView.contentSize.height - inset {
                     try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView, collectionView: collectionView)
                     return
                 }
