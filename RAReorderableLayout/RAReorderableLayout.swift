@@ -263,8 +263,9 @@ public class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognize
     // touch to the edge
     private func tryRemoveForIntersectWithEdges() throws {
         guard let fakeView = cellFakeView,
-            indexPath = fakeView.indexPath
-            where !screenEdgesForDeletion.isEmpty else {
+            indexPath = fakeView.indexPath,
+            collectionView = collectionView
+            where !screenEdgesForDeletion.isEmpty && !fakeView.isMoved else {
                 throw RAReorderedError.WrongFakeView
         }
         
@@ -273,23 +274,23 @@ public class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognize
         for edge in screenEdgesForDeletion {
             switch edge {
             case .Left:
-                if fakeViewFrame.origin.x < sectionInset.left {
-                    try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView)
+                if fakeViewFrame.origin.x < 0 {
+                    try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView, collectionView: collectionView)
                     return
                 }
             case .Top:
-                if fakeViewFrame.origin.y < sectionInset.top {
-                    try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView)
+                if fakeViewFrame.origin.y < 0 {
+                    try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView, collectionView: collectionView)
                     return
                 }
             case .Right:
-                if fakeViewFrame.maxX > sectionInset.right {
-                    try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView)
+                if fakeViewFrame.maxX > collectionView.contentSize.width {
+                    try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView, collectionView: collectionView)
                     return
                 }
             case .Bottom:
-                if fakeViewFrame.maxY > sectionInset.bottom {
-                    try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView)
+                if fakeViewFrame.maxY > collectionView.contentSize.height {
+                    try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView, collectionView: collectionView)
                     return
                 }
             }
@@ -299,11 +300,17 @@ public class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognize
     }
     
     
-    private func tryToDeleteCellAtIndexPath(indexPath: NSIndexPath, edge: RAReorderedLayoutEdge, fakeView: RACellFakeView) throws {
+    private func tryToDeleteCellAtIndexPath(
+        indexPath: NSIndexPath,
+        edge: RAReorderedLayoutEdge,
+        fakeView: RACellFakeView,
+        collectionView: UICollectionView
+        ) throws
+    {
         if let action = delegate?.collectionView(_:didRemoveCellAtIndexPath:)
-            where delegate?.collectionView?(collectionView!, canRemoveCellAtIndexPath: indexPath) == true
+            where delegate?.collectionView?(collectionView, canRemoveCellAtIndexPath: indexPath) == true
         {
-            action(collectionView!, didRemoveCellAtIndexPath: indexPath)
+            action(collectionView, didRemoveCellAtIndexPath: indexPath)
             UIView.animateWithDuration(
                 0.3,
                 animations: {
@@ -323,7 +330,7 @@ public class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognize
             throw RAReorderedError.CancelByDelegate
         }
     }
-    
+
     // move item
     private func moveItemIfNeeded() {
         guard let fakeCell = cellFakeView,
@@ -353,6 +360,8 @@ public class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognize
             
             // did move item
             self.delegate?.collectionView?(self.collectionView!, atIndexPath: atIndexPath, didMoveToIndexPath: toIndexPath)
+            fakeCell.isMoved = true
+            
             }, completion:nil)
     }
     
@@ -570,6 +579,8 @@ private class RACellFakeView: UIView {
     private var originalCenter: CGPoint?
     
     private var cellFrame: CGRect?
+    
+    private var isMoved = false
     
     required init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
