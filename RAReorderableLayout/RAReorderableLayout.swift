@@ -8,6 +8,21 @@
 
 import UIKit
 
+public enum RAReorderedLayoutEdge {
+    case Left
+    case Right
+    case Top
+    case Bottom
+}
+
+
+private enum RAReorderedError: ErrorType {
+    case WrongFakeView
+    case NotIntersectWithEdges
+    case CancelByDelegate
+}
+
+
 @objc public protocol RAReorderableLayoutDelegate: UICollectionViewDelegateFlowLayout {
     optional func collectionView(collectionView: UICollectionView, atIndexPath: NSIndexPath, willMoveToIndexPath toIndexPath: NSIndexPath)
     optional func collectionView(collectionView: UICollectionView, atIndexPath: NSIndexPath, didMoveToIndexPath toIndexPath: NSIndexPath)
@@ -19,6 +34,9 @@ import UIKit
     optional func collectionView(collectionView: UICollectionView, collectionViewLayout layout: RAReorderableLayout, didBeginDraggingItemAtIndexPath indexPath: NSIndexPath)
     optional func collectionView(collectionView: UICollectionView, collectionViewLayout layout: RAReorderableLayout, willEndDraggingItemToIndexPath indexPath: NSIndexPath)
     optional func collectionView(collectionView: UICollectionView, collectionViewLayout layout: RAReorderableLayout, didEndDraggingItemToIndexPath indexPath: NSIndexPath)
+    
+    optional func collectionView(collectionView: UICollectionView, canRemoveCellAtIndexPath: NSIndexPath) -> Bool
+    optional func collectionView(collectionView: UICollectionView, didRemoveCellAtIndexPath: NSIndexPath)
 }
 
 @objc public protocol RAReorderableLayoutDataSource: UICollectionViewDataSource {
@@ -29,6 +47,7 @@ import UIKit
     optional func scrollTrigerEdgeInsetsInCollectionView(collectionView: UICollectionView) -> UIEdgeInsets
     optional func scrollTrigerPaddingInCollectionView(collectionView: UICollectionView) -> UIEdgeInsets
     optional func scrollSpeedValueInCollectionView(collectionView: UICollectionView) -> CGFloat
+    optional func collectionViewReorderingMinimumPressDuration(collectionView: UICollectionView) -> CFTimeInterval
 }
 
 public class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerDelegate {
@@ -83,6 +102,14 @@ public class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognize
     public var trigerPadding = UIEdgeInsetsZero
     
     public var scrollSpeedValue: CGFloat = 10.0
+    
+    public var minimumPressDuration: CFTimeInterval = 0.5 {
+        didSet {
+            longPress?.minimumPressDuration = minimumPressDuration
+        }
+    }
+    
+    public var screenEdgesForDeletion = [RAReorderedLayoutEdge]()
     
     private var offsetFromTop: CGFloat {
         let contentOffset = collectionView!.contentOffset
@@ -170,6 +197,10 @@ public class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognize
         if let speed = dataSource?.scrollSpeedValueInCollectionView?(collectionView!) {
             scrollSpeedValue = speed
         }
+        // duration of the long press
+        if let duration = dataSource?.collectionViewReorderingMinimumPressDuration?(collectionView!) {
+            minimumPressDuration = duration
+        }
     }
     
     override public func layoutAttributesForElementsInRect(rect: CGRect) -> [UICollectionViewLayoutAttributes]? {
@@ -226,6 +257,70 @@ public class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognize
             setUpDisplayLink()
         } else {
             invalidateDisplayLink()
+        }
+    }
+    
+    // touch to the edge
+    private func tryRemoveForIntersectWithEdges() throws {
+        guard let fakeView = cellFakeView,
+            indexPath = fakeView.indexPath
+            where !screenEdgesForDeletion.isEmpty else {
+                throw RAReorderedError.WrongFakeView
+        }
+        
+        let fakeViewFrame = fakeView.frame
+        
+        for edge in screenEdgesForDeletion {
+            switch edge {
+            case .Left:
+                if fakeViewFrame.origin.x < sectionInset.left {
+                    try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView)
+                    return
+                }
+            case .Top:
+                if fakeViewFrame.origin.y < sectionInset.top {
+                    try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView)
+                    return
+                }
+            case .Right:
+                if fakeViewFrame.maxX > sectionInset.right {
+                    try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView)
+                    return
+                }
+            case .Bottom:
+                if fakeViewFrame.maxY > sectionInset.bottom {
+                    try tryToDeleteCellAtIndexPath(indexPath, edge: edge, fakeView: fakeView)
+                    return
+                }
+            }
+        }
+        
+        throw RAReorderedError.NotIntersectWithEdges
+    }
+    
+    
+    private func tryToDeleteCellAtIndexPath(indexPath: NSIndexPath, edge: RAReorderedLayoutEdge, fakeView: RACellFakeView) throws {
+        if let action = delegate?.collectionView(_:didRemoveCellAtIndexPath:)
+            where delegate?.collectionView?(collectionView!, canRemoveCellAtIndexPath: indexPath) == true
+        {
+            action(collectionView!, didRemoveCellAtIndexPath: indexPath)
+            UIView.animateWithDuration(
+                0.3,
+                animations: {
+                    fakeView.alpha = 0
+                },
+                completion: { _ in
+                    if self.cellFakeView == fakeView {
+                        self.fakeCellCenter = nil
+                        self.cellFakeView = nil
+                        self.collectionView?.deleteItemsAtIndexPaths([indexPath])
+                    } else {
+                        self.collectionView?.reloadData()
+                    }
+                }
+            )
+        } else {
+            throw RAReorderedError.CancelByDelegate
         }
     }
     
@@ -325,6 +420,7 @@ public class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognize
         
         longPress = UILongPressGestureRecognizer(target: self, action: #selector(RAReorderableLayout.handleLongPress(_:)))
         panGesture = UIPanGestureRecognizer(target: self, action: #selector(RAReorderableLayout.handlePanGesture(_:)))
+        longPress?.minimumPressDuration = minimumPressDuration
         longPress?.delegate = self
         panGesture?.delegate = self
         panGesture?.maximumNumberOfTouches = 1
@@ -399,7 +495,11 @@ public class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognize
             // did begin drag item
             delegate?.collectionView?(collectionView!, collectionViewLayout: self, didBeginDraggingItemAtIndexPath: indexPath!)
         case .Cancelled, .Ended:
-            cancelDrag(toIndexPath: indexPath)
+            do {
+                try tryRemoveForIntersectWithEdges()
+            } catch {
+                cancelDrag(toIndexPath: indexPath)
+            }
         default:
             break
         }

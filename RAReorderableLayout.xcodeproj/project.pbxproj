@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		DFF5E7531B8F05CE003726B0 /* RAReorderableLayout.h in Headers */ = {isa = PBXBuildFile; fileRef = DFF5E7521B8F05CE003726B0 /* RAReorderableLayout.h */; settings = {ATTRIBUTES = (Public, ); }; };
-		DFF5E75B1B8F061B003726B0 /* RAReorderableLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF5E75A1B8F061B003726B0 /* RAReorderableLayout.swift */; settings = {ASSET_TAGS = (); }; };
+		DFF5E75B1B8F061B003726B0 /* RAReorderableLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF5E75A1B8F061B003726B0 /* RAReorderableLayout.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -234,6 +234,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
+				CURRENT_PROJECT_VERSION = 2;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
@@ -252,6 +253,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
+				CURRENT_PROJECT_VERSION = 2;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
