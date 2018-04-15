@@ -20,7 +20,7 @@ __iOS8__
 ```ruby
 # Podfile  
 use_frameworks!  
-pod "RAReorderableLayout"  
+pod 'RAReorderableLayout', :git => 'https://github.com/Konshin/RAReorderableLayout'  
 ```
 ### Carthage
 ```ruby

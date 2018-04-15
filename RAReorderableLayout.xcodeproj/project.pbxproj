@@ -12,6 +12,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		D5F8AEF72083919C00C94F7E /* RAReorderableLayout.podspec */ = {isa = PBXFileReference; lastKnownFileType = text; path = RAReorderableLayout.podspec; sourceTree = SOURCE_ROOT; };
+		D5F8AEF8208391A300C94F7E /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = SOURCE_ROOT; };
 		DFF5E74F1B8F05CE003726B0 /* RAReorderableLayout.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = RAReorderableLayout.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		DFF5E7521B8F05CE003726B0 /* RAReorderableLayout.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RAReorderableLayout.h; sourceTree = "<group>"; };
 		DFF5E7541B8F05CE003726B0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -49,6 +51,8 @@
 			isa = PBXGroup;
 			children = (
 				DFF5E7521B8F05CE003726B0 /* RAReorderableLayout.h */,
+				D5F8AEF72083919C00C94F7E /* RAReorderableLayout.podspec */,
+				D5F8AEF8208391A300C94F7E /* README.md */,
 				DFF5E75A1B8F061B003726B0 /* RAReorderableLayout.swift */,
 				DFF5E7541B8F05CE003726B0 /* Info.plist */,
 			);
