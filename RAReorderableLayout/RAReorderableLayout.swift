@@ -112,7 +112,7 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
     
     fileprivate var longPress: UILongPressGestureRecognizer?
     
-    fileprivate var panGesture: UIPanGestureRecognizer?
+    fileprivate(set) public var panGesture: UIPanGestureRecognizer?
     
     fileprivate var continuousScrollDirection: direction = .stay
     
@@ -122,7 +122,7 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
     
     fileprivate var fakeCellCenter: CGPoint?
     
-    open var trigerInsets = UIEdgeInsetsMake(100.0, 100.0, 100.0, 100.0)
+    open var trigerInsets = UIEdgeInsets.init(top: 100.0, left: 100.0, bottom: 100.0, right: 100.0)
     
     open var trigerPadding = UIEdgeInsets.zero
     
@@ -261,7 +261,7 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
         }
         
         displayLink = CADisplayLink(target: self, selector: #selector(RAReorderableLayout.continuousScroll))
-        displayLink!.add(to: RunLoop.main, forMode: RunLoopMode.commonModes)
+        displayLink!.add(to: RunLoop.main, forMode: RunLoop.Mode.common)
     }
     
     fileprivate func invalidateDisplayLink() {
@@ -458,14 +458,14 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
         longPress?.delegate = self
         panGesture?.delegate = self
         panGesture?.maximumNumberOfTouches = 1
-        let gestures: NSArray! = collectionView.gestureRecognizers as NSArray!
-        gestures.enumerateObjects({ gestureRecognizer, _, _ in
+        
+        collectionView.gestureRecognizers?.forEach { gestureRecognizer in
             if let longPress = gestureRecognizer as? UILongPressGestureRecognizer {
                 longPress.require(toFail: self.longPress!)
             }
             collectionView.addGestureRecognizer(self.longPress!)
             collectionView.addGestureRecognizer(self.panGesture!)
-        })
+        }
     }
     
     open func cancelDrag() {
@@ -624,11 +624,11 @@ private class RACellFakeView: UIView {
         layer.shouldRasterize = false
         
         cellFakeImageView = UIImageView(frame: self.bounds)
-        cellFakeImageView?.contentMode = UIViewContentMode.scaleAspectFill
+        cellFakeImageView?.contentMode = UIView.ContentMode.scaleAspectFill
         cellFakeImageView?.autoresizingMask = [.flexibleWidth , .flexibleHeight]
         
         cellFakeHightedView = UIImageView(frame: self.bounds)
-        cellFakeHightedView?.contentMode = UIViewContentMode.scaleAspectFill
+        cellFakeHightedView?.contentMode = UIView.ContentMode.scaleAspectFill
         cellFakeHightedView?.autoresizingMask = [.flexibleWidth , .flexibleHeight]
         
         cell.isHighlighted = true
@@ -667,7 +667,7 @@ private class RACellFakeView: UIView {
                 shadowAnimation.fromValue = 0
                 shadowAnimation.toValue = 0.7
                 shadowAnimation.isRemovedOnCompletion = false
-                shadowAnimation.fillMode = kCAFillModeForwards
+                shadowAnimation.fillMode = CAMediaTimingFillMode.forwards
                 self.layer.add(shadowAnimation, forKey: "applyShadow")
         },
             completion: { _ in
@@ -688,7 +688,7 @@ private class RACellFakeView: UIView {
                 shadowAnimation.fromValue = 0.7
                 shadowAnimation.toValue = 0
                 shadowAnimation.isRemovedOnCompletion = false
-                shadowAnimation.fillMode = kCAFillModeForwards
+                shadowAnimation.fillMode = CAMediaTimingFillMode.forwards
                 self.layer.add(shadowAnimation, forKey: "removeShadow")
         },
             completion: { _ in
