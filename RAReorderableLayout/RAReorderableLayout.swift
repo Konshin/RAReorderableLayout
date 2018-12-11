@@ -80,7 +80,7 @@ private enum RAReorderedError: Error {
 
 open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerDelegate {
     
-    fileprivate enum direction {
+    private enum direction {
         case toTop
         case toEnd
         case stay
@@ -101,40 +101,19 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
         }
     }
     
-    open weak var delegate: RAReorderableLayoutDelegate?
-    
-    open weak var dataSource: RAReorderableLayoutDataSource? {
-        set { collectionView?.dataSource = dataSource }
-        get { return collectionView?.dataSource as? RAReorderableLayoutDataSource }
-    }
-    
     fileprivate var displayLink: CADisplayLink?
     
     fileprivate var longPress: UILongPressGestureRecognizer?
     
     fileprivate(set) public var panGesture: UIPanGestureRecognizer?
     
-    fileprivate var continuousScrollDirection: direction = .stay
+    private var continuousScrollDirection: direction = .stay
     
     fileprivate var cellFakeView: RACellFakeView?
     
     fileprivate var panTranslation: CGPoint?
     
     fileprivate var fakeCellCenter: CGPoint?
-    
-    open var trigerInsets = UIEdgeInsets.init(top: 100.0, left: 100.0, bottom: 100.0, right: 100.0)
-    
-    open var trigerPadding = UIEdgeInsets.zero
-    
-    open var scrollSpeedValue: CGFloat = 10.0
-    
-    open var minimumPressDuration: CFTimeInterval = 0.5 {
-        didSet {
-            longPress?.minimumPressDuration = minimumPressDuration
-        }
-    }
-    
-    open var screenEdgesForDeletion = [(edge: RAReorderedLayoutEdge, insetForRemove: CGFloat)]()
     
     fileprivate var offsetFromTop: CGFloat {
         let contentOffset = collectionView!.contentOffset
@@ -191,6 +170,41 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
         return scrollDirection == .vertical ? trigerPadding.bottom : trigerPadding.right
     }
     
+    // MARK: - properties
+    
+    /// Scroll triggering insets
+    open var trigerInsets = UIEdgeInsets.init(top: 100.0, left: 100.0, bottom: 100.0, right: 100.0)
+    
+    /// Scroll triggering paddings (??)
+    open var trigerPadding = UIEdgeInsets.zero
+    
+    /// Scroll speed
+    open var scrollSpeedValue: CGFloat = 10.0
+    
+    /// Minimum press duration for the moving start
+    open var minimumPressDuration: CFTimeInterval = 0.5 {
+        didSet {
+            longPress?.minimumPressDuration = minimumPressDuration
+        }
+    }
+    
+    /// Supported edges to start deletion action
+    open var screenEdgesForDeletion = [(edge: RAReorderedLayoutEdge, insetForRemove: CGFloat)]()
+    
+    /// Delegation
+    open weak var delegate: RAReorderableLayoutDelegate?
+    
+    /// Datasource for elements
+    open weak var dataSource: RAReorderableLayoutDataSource? {
+        set { collectionView?.dataSource = dataSource }
+        get { return collectionView?.dataSource as? RAReorderableLayoutDataSource }
+    }
+    
+    /// Generate feedback at start of moving
+    open var isFeedbackAtStartEnabled = true
+    
+    // MARK: - lifecycle
+    
     required public init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
         configureObserver()
@@ -227,6 +241,8 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
             minimumPressDuration = duration
         }
     }
+    
+    // MARK: - override
     
     override open func layoutAttributesForElements(in rect: CGRect) -> [UICollectionViewLayoutAttributes]? {
         guard let attributesArray = super.layoutAttributesForElements(in: rect) else { return nil }
@@ -528,6 +544,10 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
             
             // did begin drag item
             delegate?.collectionView?(collectionView!, collectionViewLayout: self, didBeginDraggingItemAtIndexPath: indexPath!)
+            
+            if isFeedbackAtStartEnabled, #available(iOS 10.0, *) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
         case .cancelled, .ended:
             do {
                 try tryRemoveForIntersectWithEdges()
