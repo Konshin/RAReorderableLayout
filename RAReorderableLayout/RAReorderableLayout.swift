@@ -7,35 +7,6 @@
 //
 
 import UIKit
-fileprivate func < <T : Comparable>(lhs: T?, rhs: T?) -> Bool {
-    switch (lhs, rhs) {
-    case let (l?, r?):
-        return l < r
-    case (nil, _?):
-        return true
-    default:
-        return false
-    }
-}
-
-fileprivate func <= <T : Comparable>(lhs: T?, rhs: T?) -> Bool {
-    switch (lhs, rhs) {
-    case let (l?, r?):
-        return l <= r
-    default:
-        return !(rhs < lhs)
-    }
-}
-
-fileprivate func >= <T : Comparable>(lhs: T?, rhs: T?) -> Bool {
-    switch (lhs, rhs) {
-    case let (l?, r?):
-        return l >= r
-    default:
-        return !(lhs < rhs)
-    }
-}
-
 
 public enum RAReorderedLayoutEdge {
     case left
@@ -103,9 +74,19 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
     
     fileprivate var displayLink: CADisplayLink?
     
-    fileprivate var longPress: UILongPressGestureRecognizer?
+    private lazy var longPress: UILongPressGestureRecognizer = {
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(RAReorderableLayout.handleLongPress(_:)))
+        longPress.minimumPressDuration = 0.1
+        longPress.delegate = self
+        return longPress
+    }()
     
-    fileprivate(set) public var panGesture: UIPanGestureRecognizer?
+    private(set) public lazy var panGesture: UIPanGestureRecognizer = {
+        let panGesture = UIPanGestureRecognizer(target: self, action: #selector(RAReorderableLayout.handlePanGesture(_:)))
+        panGesture.delegate = self
+        panGesture.maximumNumberOfTouches = 1
+        return panGesture
+    }()
     
     private var continuousScrollDirection: direction = .stay
     
@@ -184,7 +165,7 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
     /// Minimum press duration for the moving start
     open var minimumPressDuration: CFTimeInterval = 0.5 {
         didSet {
-            longPress?.minimumPressDuration = minimumPressDuration
+            longPress.minimumPressDuration = min(minimumPressDuration, 0.1)
         }
     }
     
@@ -267,6 +248,8 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
         }
     }
     
+    // MARK: - private
+    
     fileprivate func configureObserver() {
         addObserver(self, forKeyPath: "collectionView", options: [], context: nil)
     }
@@ -288,9 +271,13 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
     
     // begein scroll
     fileprivate func beginScrollIfNeeded() {
-        if cellFakeView == nil { return }
+        guard cellFakeView != nil,
+            let fakeCellTopEdge = fakeCellTopEdge,
+            let fakeCellEndEdge = fakeCellEndEdge else {
+                return
+        }
         
-        if  fakeCellTopEdge <= offsetFromTop + triggerPaddingTop + triggerInsetTop {
+        if fakeCellTopEdge <= offsetFromTop + triggerPaddingTop + triggerInsetTop {
             continuousScrollDirection = .toTop
             setUpDisplayLink()
         } else if fakeCellEndEdge >= offsetFromTop + collectionViewLength - triggerPaddingEnd - triggerInsetEnd {
@@ -468,23 +455,20 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
     fileprivate func setUpGestureRecognizers() {
         guard let collectionView = collectionView else { return }
         
-        longPress = UILongPressGestureRecognizer(target: self, action: #selector(RAReorderableLayout.handleLongPress(_:)))
-        panGesture = UIPanGestureRecognizer(target: self, action: #selector(RAReorderableLayout.handlePanGesture(_:)))
-        longPress?.minimumPressDuration = minimumPressDuration
-        longPress?.delegate = self
-        panGesture?.delegate = self
-        panGesture?.maximumNumberOfTouches = 1
-        
         collectionView.gestureRecognizers?.forEach { gestureRecognizer in
             if let longPress = gestureRecognizer as? UILongPressGestureRecognizer {
-                longPress.require(toFail: self.longPress!)
+                longPress.require(toFail: self.longPress)
             }
-            collectionView.addGestureRecognizer(self.longPress!)
-            collectionView.addGestureRecognizer(self.panGesture!)
         }
+        
+        collectionView.addGestureRecognizer(longPress)
+        collectionView.addGestureRecognizer(panGesture)
     }
     
     open func cancelDrag() {
+        longPress.cancel()
+        panGesture.cancel()
+        
         cancelDrag(toIndexPath: nil)
     }
     
@@ -501,7 +485,11 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
         invalidateDisplayLink()
         
         cellFakeView!.pushBackView {
-            self.cellFakeView!.removeFromSuperview()
+            guard let view = self.cellFakeView else {
+                return
+            }
+            
+            view.removeFromSuperview()
             self.cellFakeView = nil
             self.invalidateLayout()
             
@@ -510,59 +498,86 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
         }
     }
     
-    // long press gesture
+    // MARK: - Recognizers
+    
+    private var isMoveStarted = true
+    
+    /// Timer to start moving
+    private var startMoveTimer: Timer?
+    
+    // long press start gesture
     @objc internal func handleLongPress(_ longPress: UILongPressGestureRecognizer!) {
         let location = longPress.location(in: collectionView)
-        var indexPath: IndexPath? = collectionView?.indexPathForItem(at: location)
+        var optionalIndexPath: IndexPath? = collectionView?.indexPathForItem(at: location)
         
         if let cellFakeView = cellFakeView {
-            indexPath = cellFakeView.indexPath
+            optionalIndexPath = cellFakeView.indexPath
         }
         
-        if indexPath == nil { return }
+        guard let indexPath = optionalIndexPath else { return }
         
         switch longPress.state {
         case .began:
-            // will begin drag item
-            delegate?.collectionView?(collectionView!, collectionViewLayout: self, willBeginDraggingItemAtIndexPath: indexPath!)
-            
-            collectionView?.scrollsToTop = false
-            
-            let currentCell = collectionView?.cellForItem(at: indexPath!)
+            let currentCell = collectionView?.cellForItem(at: indexPath)
             
             cellFakeView = RACellFakeView(cell: currentCell!)
             cellFakeView!.indexPath = indexPath
             cellFakeView!.originalCenter = currentCell?.center
-            cellFakeView!.cellFrame = layoutAttributesForItem(at: indexPath!)!.frame
+            cellFakeView!.cellFrame = layoutAttributesForItem(at: indexPath)!.frame
             collectionView?.addSubview(cellFakeView!)
             
             fakeCellCenter = cellFakeView!.center
             
             invalidateLayout()
             
-            cellFakeView?.pushFowardView()
+            cellFakeView?.pushFowardView(animationDuration: minimumPressDuration)
             
-            // did begin drag item
-            delegate?.collectionView?(collectionView!, collectionViewLayout: self, didBeginDraggingItemAtIndexPath: indexPath!)
-            
-            if isFeedbackAtStartEnabled, #available(iOS 10.0, *) {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            }
+            startMoveTimer?.invalidate()
+            startMoveTimer = Timer.scheduledTimer(timeInterval: minimumPressDuration,
+                                                  target: self,
+                                                  selector: #selector(startMoving),
+                                                  userInfo: nil,
+                                                  repeats: false)
         case .cancelled, .ended:
+            guard isMoveStarted else {
+                return
+            }
+            startMoveTimer?.invalidate()
             do {
                 try tryRemoveForIntersectWithEdges()
             } catch {
                 cancelDrag(toIndexPath: indexPath)
             }
+            isMoveStarted = false
         default:
             break
+        }
+    }
+    
+    @objc private func startMoving() {
+        guard let indexPath = cellFakeView?.indexPath else {
+            return
+        }
+        
+        // will begin drag item
+        delegate?.collectionView?(collectionView!, collectionViewLayout: self, willBeginDraggingItemAtIndexPath: indexPath)
+        
+        isMoveStarted = true
+        collectionView?.scrollsToTop = false
+        
+        // did begin drag item
+        delegate?.collectionView?(collectionView!, collectionViewLayout: self, didBeginDraggingItemAtIndexPath: indexPath)
+        
+        if isFeedbackAtStartEnabled, #available(iOS 10.0, *) {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
     }
     
     // pan gesture
     @objc func handlePanGesture(_ pan: UIPanGestureRecognizer!) {
         panTranslation = pan.translation(in: collectionView!)
-        if let cellFakeView = cellFakeView,
+        if isMoveStarted,
+            let cellFakeView = cellFakeView,
             let fakeCellCenter = fakeCellCenter,
             let panTranslation = panTranslation {
             switch pan.state {
@@ -594,7 +609,7 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
         case longPress:
             return !(collectionView!.panGestureRecognizer.state != .possible && collectionView!.panGestureRecognizer.state != .failed)
         case panGesture:
-            return !(longPress!.state == .possible || longPress!.state == .failed)
+            return !(longPress.state == .possible || longPress.state == .failed)
         default:
             return true
         }
@@ -603,13 +618,23 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
     open func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         switch gestureRecognizer {
         case panGesture:
-            return otherGestureRecognizer == longPress
+            return otherGestureRecognizer === longPress
         case collectionView?.panGestureRecognizer:
-            return (longPress!.state != .possible || longPress!.state != .failed)
+            return (longPress.state != .possible || longPress.state != .failed)
         default:
             return true
         }
     }
+}
+
+/// Private constants
+private enum Constants {
+    
+    /// Key for add shadow animation
+    static let shadowAddAnimationKey = "applyShadow"
+    /// Key for remove shadow animation
+    static let shadowRemoveAnimationKey = "removeShadow"
+    
 }
 
 private class RACellFakeView: UIView {
@@ -674,29 +699,36 @@ private class RACellFakeView: UIView {
         )
     }
     
-    func pushFowardView() {
-        UIView.animate(
-            withDuration: 0.3,
-            delay: 0,
-            options: .beginFromCurrentState,
-            animations: {
-                self.center = self.originalCenter!
-                self.transform = CGAffineTransform(scaleX: 1.1, y: 1.1)
-                self.cellFakeHightedView!.alpha = 0;
-                let shadowAnimation = CABasicAnimation(keyPath: "shadowOpacity")
-                shadowAnimation.fromValue = 0
-                shadowAnimation.toValue = 0.7
-                shadowAnimation.isRemovedOnCompletion = false
-                shadowAnimation.fillMode = CAMediaTimingFillMode.forwards
-                self.layer.add(shadowAnimation, forKey: "applyShadow")
-        },
-            completion: { _ in
-                self.cellFakeHightedView?.removeFromSuperview()
+    func pushFowardView(animationDuration: TimeInterval?) {
+        if let duration = animationDuration {
+            UIView.animate(
+                withDuration: duration,
+                delay: 0,
+                options: .beginFromCurrentState,
+                animations: {
+                    self.center = self.originalCenter!
+                    self.transform = CGAffineTransform(scaleX: 1.1, y: 1.1)
+                    self.cellFakeHightedView!.alpha = 0;
+                    let shadowAnimation = CABasicAnimation(keyPath: #keyPath(CALayer.shadowOpacity))
+                    shadowAnimation.fromValue = 0
+                    shadowAnimation.toValue = 0.7
+                    shadowAnimation.isRemovedOnCompletion = false
+                    shadowAnimation.fillMode = CAMediaTimingFillMode.forwards
+                    self.layer.add(shadowAnimation, forKey: Constants.shadowAddAnimationKey)
+            },
+                completion: { _ in
+                    self.cellFakeHightedView?.removeFromSuperview()
+            })
+        } else {
+            self.center = self.originalCenter!
+            self.transform = CGAffineTransform(scaleX: 1.1, y: 1.1)
+            self.layer.shadowOpacity = 0.7
         }
-        )
     }
     
     func pushBackView(_ completion: (()->Void)?) {
+        layer.removeAllAnimations()
+        
         UIView.animate(
             withDuration: 0.3,
             delay: 0,
@@ -704,12 +736,12 @@ private class RACellFakeView: UIView {
             animations: {
                 self.transform = CGAffineTransform.identity
                 self.frame = self.cellFrame!
-                let shadowAnimation = CABasicAnimation(keyPath: "shadowOpacity")
-                shadowAnimation.fromValue = 0.7
+                let shadowAnimation = CABasicAnimation(keyPath: #keyPath(CALayer.shadowOpacity))
+                shadowAnimation.fromValue = self.layer.shadowOpacity
                 shadowAnimation.toValue = 0
                 shadowAnimation.isRemovedOnCompletion = false
                 shadowAnimation.fillMode = CAMediaTimingFillMode.forwards
-                self.layer.add(shadowAnimation, forKey: "removeShadow")
+                self.layer.add(shadowAnimation, forKey: Constants.shadowRemoveAnimationKey)
         },
             completion: { _ in
                 completion?()
@@ -729,4 +761,18 @@ private class RACellFakeView: UIView {
 // Convenience method
 private func ~= (obj:NSObjectProtocol?, r:UIGestureRecognizer) -> Bool {
     return r.isEqual(obj)
+}
+
+extension UIGestureRecognizer {
+    
+    /// Отменяет действие рекогнайзера
+    fileprivate func cancel() {
+        guard isEnabled else {
+            return
+        }
+        
+        isEnabled = false
+        isEnabled = true
+    }
+    
 }
