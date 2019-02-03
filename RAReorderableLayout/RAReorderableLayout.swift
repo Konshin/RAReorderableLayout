@@ -121,12 +121,22 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
     }
     
     fileprivate var insetsTop: CGFloat {
-        let contentInsets = collectionView!.contentInset
+        let contentInsets: UIEdgeInsets
+        if #available(iOS 11.0, *) {
+            contentInsets = collectionView!.adjustedContentInset
+        } else {
+            contentInsets = collectionView!.contentInset
+        }
         return scrollDirection == .vertical ? contentInsets.top : contentInsets.left
     }
     
     fileprivate var insetsEnd: CGFloat {
-        let contentInsets = collectionView!.contentInset
+        let contentInsets: UIEdgeInsets
+        if #available(iOS 11.0, *) {
+            contentInsets = collectionView!.adjustedContentInset
+        } else {
+            contentInsets = collectionView!.contentInset
+        }
         return scrollDirection == .vertical ? contentInsets.bottom : contentInsets.right
     }
     
