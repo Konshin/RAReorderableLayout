@@ -592,19 +592,18 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
     
     // gesture recognize delegate
     open func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        // allow move item
-        let location = gestureRecognizer.location(in: collectionView)
-        guard let indexPath = collectionView?.indexPathForItem(at: location),
-            let cell = collectionView?.cellForItem(at: indexPath),
-            delegate?.collectionView?(collectionView!, allowMoveAtIndexPath: indexPath, pointInsideCell: cell.convert(location, from: collectionView)) == true else {
-                return false
-        }
-        
         switch gestureRecognizer {
         case longPress:
+            // allow move item
+            let location = gestureRecognizer.location(in: collectionView)
+            guard let indexPath = collectionView?.indexPathForItem(at: location),
+                let cell = collectionView?.cellForItem(at: indexPath),
+                delegate?.collectionView?(collectionView!, allowMoveAtIndexPath: indexPath, pointInsideCell: cell.convert(location, from: collectionView)) == true else {
+                    return false
+            }
             return !(collectionView!.panGestureRecognizer.state != .possible && collectionView!.panGestureRecognizer.state != .failed)
         case panGesture:
-            return !(longPress!.state == .possible || longPress!.state == .failed)
+            return cellFakeView != nil && !(longPress!.state == .possible || longPress!.state == .failed)
         default:
             return true
         }
@@ -613,13 +612,27 @@ open class RAReorderableLayout: UICollectionViewFlowLayout, UIGestureRecognizerD
     open func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         switch gestureRecognizer {
         case panGesture:
-            return otherGestureRecognizer == longPress
+            return true
         case collectionView?.panGestureRecognizer:
             return (longPress!.state != .possible || longPress!.state != .failed)
         default:
             return true
         }
     }
+    
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return false
+    }
+    
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        switch gestureRecognizer {
+        case panGesture:
+            return otherGestureRecognizer !== longPress
+        default:
+            return false
+        }
+    }
+    
 }
 
 private class RACellFakeView: UIView {
